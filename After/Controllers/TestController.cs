@@ -34,7 +34,6 @@ namespace After.Controllers
             }
             catch (Exception ex)
             {
-
                 throw;
             }
         }

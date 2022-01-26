@@ -19,65 +19,56 @@ namespace After.Services
 
         public async Task<Unit> Handle(AssignOfferRequest request, CancellationToken cancellationToken)
         {
-            try
+            await SeedData(request);
+
+            var member = await _appDbContext.Members.FindAsync(new object[] { request.MemberId }, cancellationToken);
+            var offerType = await _appDbContext.OfferTypes.FindAsync(new object[] { request.OfferTypeId }, cancellationToken);
+
+            // Calculate offer value
+            _httpClient.BaseAddress = new Uri("http://localhost:5080/Test/");
+
+            var response = await _httpClient.GetAsync(
+                $"calculate-offer-value?email={member.Email}&offerType={offerType.Name}",
+                cancellationToken);
+
+            response.EnsureSuccessStatusCode();
+
+            await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var value = await JsonSerializer.DeserializeAsync<int>(responseStream, cancellationToken: cancellationToken);
+
+            // Calculate expiration date
+            DateTime dateExpiring;
+
+            switch (offerType.ExpirationType)
             {
-                await SeedData(request);
-
-                var member = await _appDbContext.Members.FindAsync(new object[] { request.MemberId }, cancellationToken);
-                var offerType = await _appDbContext.OfferTypes.FindAsync(new object[] { request.OfferTypeId }, cancellationToken);
-
-                // Calculate offer value
-                _httpClient.BaseAddress = new Uri("http://localhost:5080/Test/");
-
-                var response = await _httpClient.GetAsync(
-                    $"calculate-offer-value?email={member.Email}&offerType={offerType.Name}",
-                    cancellationToken);
-
-                response.EnsureSuccessStatusCode();
-
-                await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                var value = await JsonSerializer.DeserializeAsync<int>(responseStream, cancellationToken: cancellationToken);
-
-                // Calculate expiration date
-                DateTime dateExpiring;
-
-                switch (offerType.ExpirationType)
-                {
-                    case ExpirationType.Assignment:
-                        dateExpiring = DateTime.Today.AddDays(offerType.DaysValid);
-                        break;
-                    case ExpirationType.Fixed:
-                        dateExpiring = offerType.BeginDate?.AddDays(offerType.DaysValid)
-                                       ?? throw new InvalidOperationException();
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-
-                // Assign offer
-                var offer = new Offer
-                {
-                    MemberAssigned = member,
-                    Type = offerType,
-                    Value = value,
-                    DateExpiring = dateExpiring
-                };
-                member.AssignedOffers.Add(offer);
-                member.NumberOfActiveOffers++;
-
-                await _appDbContext.Offers.AddAsync(offer, cancellationToken);
-
-                await _appDbContext.SaveChangesAsync(cancellationToken);
-
-                return Unit.Value;
-
+                case ExpirationType.Assignment:
+                    dateExpiring = DateTime.Today.AddDays(offerType.DaysValid);
+                    break;
+                case ExpirationType.Fixed:
+                    dateExpiring = offerType.BeginDate?.AddDays(offerType.DaysValid)
+                                   ?? throw new InvalidOperationException();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
-            catch (Exception ex)
+
+            // Assign offer
+            var offer = new Offer
             {
+                MemberAssigned = member,
+                Type = offerType,
+                Value = value,
+                DateExpiring = dateExpiring
+            };
+            member.AssignedOffers.Add(offer);
+            member.NumberOfActiveOffers++;
 
-                throw;
-            }
-            
+            await _appDbContext.Offers.AddAsync(offer, cancellationToken);
+
+            await _appDbContext.SaveChangesAsync(cancellationToken);
+
+            return Unit.Value;
+
         }
 
         private async Task SeedData(AssignOfferRequest request)
