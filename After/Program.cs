@@ -16,6 +16,8 @@ builder.Services.AddDbContext<AppDbContext>();
 
 builder.Services.AddHttpClient();
 
+builder.Services.AddTransient<IOfferValueCalculator, OfferValueCalculator>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

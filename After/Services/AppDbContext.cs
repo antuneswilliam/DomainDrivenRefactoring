@@ -15,5 +15,17 @@ namespace After.Services
 
             optionsBuilder.UseInMemoryDatabase("AppDb");
         }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<OfferType>()
+                .Property(e => e.ExpirationType)
+                .HasConversion(
+                    p => p.Value,
+                    v => ExpirationType.FromValue(v)
+                    );
+        }
     }
 }
